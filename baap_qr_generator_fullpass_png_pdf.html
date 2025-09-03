@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Durga Puja – QR Pass Generator (Static)</title>
+  <meta name="description" content="Generate QR passes from name, mobile, and headcount. Works entirely in the browser. No server, no database." />
+  <style>
+    :root { --bg:#0b0b0c; --panel:#141417; --accent:#cc0000; --text:#e9e9ee; --muted:#a8a8b3; --ok:#10b981; --warn:#f59e0b; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans"; background: linear-gradient(180deg,#0b0b0c,#111114 60%,#0b0b0c); color: var(--text); }
+    .wrap { max-width: 940px; margin: 32px auto; padding: 20px; }
+    .card { background: radial-gradient(1200px 500px at 20% -10%, rgba(204,0,0,.12), transparent 60%), var(--panel); border: 1px solid #24242a; border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    h1 { font-size: clamp(22px, 2.6vw, 34px); margin: 0 0 6px; letter-spacing: .3px; }
+    .sub { color: var(--muted); margin-bottom: 18px; }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width:720px){ .grid{ grid-template-columns: 1fr 1fr; } }
+    label { font-size: 13px; color: var(--muted); display:block; margin-bottom: 6px; }
+    input, select { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid #2a2a33; background: #0f0f12; color: var(--text); outline: none; }
+    input:focus, select:focus { border-color: #3a3a44; box-shadow: 0 0 0 3px rgba(204,0,0,.18); }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .btn { appearance:none; border:0; padding: 12px 16px; border-radius: 12px; cursor:pointer; font-weight:600; letter-spacing:.2px; }
+    .btn.primary { background: var(--accent); color: white; }
+    .btn.ghost { background: transparent; color: var(--text); border: 1px solid #2a2a33; }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .qrbox { background:#0f0f12; border:1px dashed #2a2a33; border-radius:16px; min-height: 240px; display:flex; align-items:center; justify-content:center; padding: 18px; }
+    .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .badge { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:6px 10px; background:#101015; border:1px solid #26262e; border-radius:999px; color:#c9c9d4; }
+    .footer { color:#8b8b96; font-size:12px; margin-top: 22px; line-height:1.6; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .sep { height:1px; background: #24242a; margin:16px 0; border-radius:1px; }
+    .hint { font-size:12px; color: var(--muted); margin-top:6px; }
+    .small { font-size:12px; }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background:#0d0d10; border:1px solid #26262e; border-radius:6px; padding:2px 6px; color:#c9c9d4; }
+    @media print {
+      body { background: #fff; }
+      .wrap { max-width: 100%; margin: 0; padding: 0; }
+      .card, .sep, .footer, .sub, .grid > div:nth-child(2), .row .btn#genBtn, .row .btn#downloadBtn, .row span#status { display: none !important; }
+      #passCard { border: none !important; box-shadow: none !important; background: #fff !important; color: #000 !important; }
+      #passCard .qrbox { border: none !important; }
+      .row .btn#printBtn { display: none !important; }
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <h1>Durga Puja – QR Pass Generator</h1>
+          <div class="sub">Works entirely in your browser. <span class="badge"><span>🔒</span> No server • No database</span></div>
+        </div>
+        <div class="row" style="gap:10px;align-items:center;">
+          <img src="baap-logo.png" alt="BAAP logo" style="height:28px;width:auto;vertical-align:middle;opacity:.9;" onerror="this.style.display='none'"/>
+          <div class="badge">📱 Bengali Association Aerospace Park</div>
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:6px;">
+        <div>
+          <label for="name">Full Name</label>
+          <input id="name" placeholder="Your name (for the pass)" maxlength="64" />
+          <div class="hint">This name will appear on the pass and in the encoded data.</div>
+        </div>
+        <div>
+          <label for="mobile">Mobile Number (India)</label>
+          <input id="mobile" inputmode="numeric" placeholder="10-digit mobile (e.g., 98xxxxxxxx)" maxlength="10" />
+          <div class="hint">Accepted: 10 digits starting with 6–9 (offline validation)</div>
+        </div>
+        <div>
+          <label for="count">Number of Persons</label>
+          <select id="count"></select>
+          <div class="hint">Choose total heads for the pass</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px;">
+        <button class="btn primary" id="genBtn">Generate QR</button>
+        <button class="btn ghost" id="downloadBtn" disabled>Download Pass (PNG)</button>
+        <button class="btn ghost" id="pdfBtn" disabled>Download Pass (PDF)</button>
+        <button class="btn ghost" id="printBtn" disabled>Print Pass</button>
+        <span class="small" id="status"></span>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="grid">
+        <div>
+          <div id="passCard" style="background:#0f0f12;border:1px solid #2a2a33;border-radius:16px;padding:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <div style="font-weight:700;letter-spacing:.3px;">BAAP QR Pass</div>
+              <img src="baap-logo.png" alt="BAAP" onerror="this.style.display='none'" style="height:22px;width:auto;opacity:.9;" />
+            </div>
+            <div class="qrbox" id="qr" style="min-height:240px;"> </div>
+            <div style="margin-top:12px;font-size:13px;color:#c9c9d4;line-height:1.4;">
+              <div><strong>Name:</strong> <span id="infoName">—</span></div>
+              <div><strong>Mobile:</strong> <span id="infoMobile">—</span></div>
+              <div><strong>Persons:</strong> <span id="infoPersons">—</span></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h3 style="margin:0 0 6px;">Encoded Data (for your records)</h3>
+          <pre id="payload" class="kbd" style="display:block; padding:12px; overflow:auto; white-space:pre-wrap; word-break:break-word; min-height:120px;">—</pre>
+          <div class="meta">Format: JSON with checksum. Fields: <code class="kbd">name</code>, <code class="kbd">mobile</code>, <code class="kbd">persons</code>, <code class="kbd">ts</code>, <code class="kbd">nonce</code>, <code class="kbd">sig</code>.</div>
+          <div class="footer">Notes:
+            <ul>
+              <li>This is a <strong>static GitHub Pages</strong> site. All code runs on-device.</li>
+              <li>To verify at the gate, use any QR scanner app and inspect the JSON.</li>
+              <li>Optionally print passes in advance; the QR remains valid offline.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="footer">Tip: Host this file on <strong>GitHub Pages</strong> (Settings → Pages → deploy from <em>main</em> branch). Link to it from WordPress with a simple button.</p>
+  </div>
+
+  <script>
+    const countSel = document.getElementById('count');
+    for (let i=1;i<=10;i++){ const o=document.createElement('option'); o.value=i; o.textContent=i; countSel.appendChild(o);}
+
+    const nameEl = document.getElementById('name');
+    const mobileEl = document.getElementById('mobile');
+    const statusEl = document.getElementById('status');
+    const payloadEl = document.getElementById('payload');
+    const genBtn = document.getElementById('genBtn');
+    const dlBtn = document.getElementById('downloadBtn');
+    const pdfBtn = document.getElementById('pdfBtn');
+    const printBtn = document.getElementById('printBtn');
+    const qrContainer = document.getElementById('qr');
+    const infoName = document.getElementById('infoName');
+    const infoMobile = document.getElementById('infoMobile');
+    const infoPersons = document.getElementById('infoPersons');
+    let qr;
+
+    function isValidIndianMobile(s){ return /^([6-9][0-9]{9})$/.test(s); }
+    function sha1(msg){
+      const enc = new TextEncoder().encode(msg);
+      return crypto.subtle.digest('SHA-1', enc).then(buf=>{
+        const bytes = Array.from(new Uint8Array(buf));
+        return bytes.map(b=>b.toString(16).padStart(2,'0')).join('');
+      });
+    }
+    async function makePayload(name, mobile, persons){
+      const ts = new Date().toISOString();
+      const nonce = Math.random().toString(36).slice(2,10);
+      const base = JSON.stringify({ name, mobile, persons, ts, nonce });
+      const sig = await sha1(base);
+      return { name, mobile, persons, ts, nonce, sig };
+    }
+    function clearQR(){ qrContainer.innerHTML=''; qr = null; }
+
+    async function generate(){
+      const name = (nameEl.value || '').trim();
+      const mobile = (mobileEl.value || '').trim();
+      const persons = parseInt(countSel.value,10);
+      statusEl.textContent = '';
+      dlBtn.disabled = true; pdfBtn.disabled = true; printBtn.disabled = true; payloadEl.textContent = '—'; clearQR();
+
+      if(name.length < 2){
+        statusEl.textContent = 'Enter your name (at least 2 characters).';
+        statusEl.className = 'small warn';
+        return;
+      }
+      if(!isValidIndianMobile(mobile)){
+        statusEl.textContent = 'Enter a valid 10-digit Indian mobile starting with 6–9.';
+        statusEl.className = 'small warn';
+        return;
+      }
+
+      const payload = await makePayload(name, mobile, persons);
+      const dataStr = JSON.stringify(payload);
+
+      // Render QR
+      qr = new QRCode(qrContainer, {
+        text: dataStr, width: 260, height: 260,
+        colorDark: "#000000", colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      infoName.textContent = name;
+      infoMobile.textContent = mobile.replace(/^(\\d{4})(\\d{3})(\\d{3})$/, '$1-$2-$3');
+      infoPersons.textContent = persons;
+
+      payloadEl.textContent = dataStr;
+      statusEl.textContent = 'QR generated on this device (no upload).';
+      statusEl.className = 'small ok';
+      dlBtn.disabled = false;
+      pdfBtn.disabled = false;
+      printBtn.disabled = false;
+    }
+
+    async function downloadPng(){
+      if(!qr) return;
+      const card = document.getElementById('passCard');
+      try {
+        const canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff' });
+        const dataURL = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        const name = (nameEl.value||'Guest').trim();
+        const mobile = (mobileEl.value||'').trim();
+        const persons = parseInt(countSel.value,10);
+        const safeName = (name.replace(/[^a-z0-9]+/gi,'_').slice(0,24) || 'Guest');
+        a.href = dataURL;
+        a.download = `BAAP_PASS_${safeName}_${mobile}_${persons}.png`;
+        document.body.appendChild(a); a.click(); a.remove();
+      } catch(err){
+        alert('Could not render the pass to an image.');
+        console.error(err);
+      }
+    }
+
+    async function downloadPdf(){
+      if(!qr) return;
+      const card = document.getElementById('passCard');
+      try {
+        const canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const margin = 36; // 0.5 inch
+        const maxWidth = pageWidth - margin*2;
+        const imgWidth = maxWidth;
+        const imgHeight = canvas.height * (imgWidth / canvas.width);
+        let y = margin;
+        pdf.addImage(imgData, 'PNG', margin, y, imgWidth, imgHeight, undefined, 'FAST');
+        y += imgHeight + 14;
+        const name = (nameEl.value||'Guest').trim();
+        const mobile = (mobileEl.value||'').trim();
+        const persons = parseInt(countSel.value,10);
+        pdf.setFontSize(10);
+        pdf.text(`Generated for: ${name}  |  Mobile: ${mobile}  |  Persons: ${persons}`, margin, Math.max(y, pageWidth-20));
+        const safeName = (name.replace(/[^a-z0-9]+/gi,'_').slice(0,24) || 'Guest');
+        pdf.save(`BAAP_PASS_${safeName}_${mobile}_${persons}.pdf`);
+      } catch(err){
+        alert('Could not render the pass to PDF.');
+        console.error(err);
+      }
+    }
+
+    genBtn.addEventListener('click', generate);
+    dlBtn.addEventListener('click', downloadPng);
+    pdfBtn.addEventListener('click', downloadPdf);
+    printBtn.addEventListener('click', ()=>window.print());
+    nameEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter') generate(); });
+    mobileEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter') generate(); });
+  </script>
+</body>
+</html>
